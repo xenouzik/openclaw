@@ -62,7 +62,7 @@ Configure globally or per channel via `messages.queue`:
 
 Options apply to `followup`, `collect`, and `steer-backlog` (and to `steer` when it falls back to followup):
 
-- `debounceMs`: wait for quiet before starting a followup turn (prevents “continue, continue”).
+- `debounceMs`: wait for quiet before starting a followup turn (prevents "continue, continue").
 - `cap`: max queued messages per session.
 - `drop`: overflow policy (`old`, `new`, `summarize`).
 
@@ -83,7 +83,17 @@ Defaults: `debounceMs: 1000`, `cap: 20`, `drop: summarize`.
 - Per-session lanes guarantee that only one agent run touches a given session at a time.
 - No external dependencies or background worker threads; pure TypeScript + promises.
 
+## Steer and partial streaming
+
+When `channels.<provider>.streaming` is set to `partial` (or `block`), the agent emits intermediate draft messages as it works. This can make `steer` look like it is not working when it is:
+
+- Each steered message is picked up quickly between partial-stream flushes and triggers a small status reply immediately, so several short responses appear in sequence.
+- Without partial streaming the same behavior produces a single final response — the steer still fired, it just wasn't visible mid-run.
+
+`steer` is not a hard abort. It injects the incoming message at the next tool boundary, but any tool call already in flight (e.g. a subprocess or network request) will run to completion before the injected message takes effect. If you need to stop an in-flight tool immediately, use `interrupt` mode instead (legacy, aborts the active run).
+
 ## Troubleshooting
 
-- If commands seem stuck, enable verbose logs and look for “queued for …ms” lines to confirm the queue is draining.
+- If commands seem stuck, enable verbose logs and look for "queued for …ms" lines to confirm the queue is draining.
 - If you need queue depth, enable verbose logs and watch for queue timing lines.
+- If `steer` appears to do nothing: check that the session queue mode is actually `steer` (run `/queue` to confirm — a per-session override silently trumps the config value). Also confirm that `channels.<provider>.streaming` is not `off`; steer falls back to `followup` when the run is not streaming.
